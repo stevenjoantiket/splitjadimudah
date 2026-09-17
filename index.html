@@ -44,7 +44,14 @@
     background:var(--panel2); border:1px solid var(--border); color:var(--text);
     border-radius:8px; padding:10px 12px; font-size:0.95rem; width:100%;
   }
-  input[type=number]{ -moz-appearance:textfield; }
+  .money-wrap{position:relative; width:100%;}
+  .item-row .money-wrap{flex:1; min-width:0;}
+  .money-wrap .rp-prefix{
+    display:none; position:absolute; left:12px; top:50%; transform:translateY(-50%);
+    color:var(--muted); font-size:0.9rem; font-weight:600; pointer-events:none;
+  }
+  .money-wrap.has-value .rp-prefix{display:block;}
+  .money-wrap.has-value input{padding-left:36px;}
   button{
     cursor:pointer; border:none; border-radius:8px; padding:10px 14px;
     font-size:0.9rem; font-weight:600; transition:opacity .15s;
@@ -192,32 +199,57 @@
     position:absolute;
   }
   .support-link svg{width:15px; height:15px; color:#3fe9ff; flex-shrink:0; position:relative; z-index:1;}
+
+  .hero{
+    position:relative; overflow:hidden; border-radius:20px;
+    padding:32px 20px 36px; margin-bottom:20px;
+    background:#04101c;
+  }
+  .hero-canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
+  .hero-content{position:relative; z-index:1;}
+  .hero .support-bar{margin-bottom:20px;}
+  .hero h1{
+    font-size:1.7rem; margin:0 0 6px; color:#fff;
+    text-shadow:0 2px 12px rgba(0,0,0,0.35);
+  }
+  .hero .sub{color:rgba(231,238,244,0.75); margin:0; max-width:480px;}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="support-bar">
-    <a class="support-link" href="https://saweria.co/stevenjoan" target="_blank" rel="noopener noreferrer">
-      <span class="blob1"></span>
-      <span class="inner">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-10-9.2C.5 8.4 2 5 5.5 5c2 0 3.5 1.2 4.5 2.7C11 6.2 12.5 5 14.5 5 18 5 19.5 8.4 22 11.8 19.5 16.4 12 21 12 21z"/></svg>
-        Support Joan on Saweria
-      </span>
-    </a>
+  <div class="hero">
+    <canvas id="sparkleCanvas" class="hero-canvas"></canvas>
+    <div class="hero-content">
+      <div class="support-bar">
+        <a class="support-link" href="https://saweria.co/stevenjoan" target="_blank" rel="noopener noreferrer">
+          <span class="blob1"></span>
+          <span class="inner">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-10-9.2C.5 8.4 2 5 5.5 5c2 0 3.5 1.2 4.5 2.7C11 6.2 12.5 5 14.5 5 18 5 19.5 8.4 22 11.8 19.5 16.4 12 21 12 21z"/></svg>
+            Support Joan on Saweria
+          </span>
+        </a>
+      </div>
+      <h1><span id="typewriter"></span><span class="tw-cursor">|</span></h1>
+      <p class="sub">Enter the bill totals, add each person's items, and get a fair, exact split you can screenshot and share.</p>
+    </div>
   </div>
-  <h1><span id="typewriter"></span><span class="tw-cursor">|</span></h1>
-  <p class="sub">Enter the bill totals, add each person's items, and get a fair, exact split you can screenshot and share.</p>
 
   <div class="card">
     <h2>Bill totals</h2>
     <div class="totals-grid">
       <div class="field">
-        <label>Subtotal (auto from items, editable)</label>
-        <input type="number" id="subtotalInput" oninput="manualSubtotal=true; render()">
+        <label>Subtotal</label>
+        <div class="money-wrap">
+          <span class="rp-prefix">Rp</span>
+          <input type="text" inputmode="numeric" id="subtotalInput" placeholder="Subtotal" oninput="onMoneyField(this); renderResult()">
+        </div>
       </div>
       <div class="field">
         <label>Final total to pay (incl. tax/service/discount)</label>
-        <input type="number" id="totalInput" oninput="render()">
+        <div class="money-wrap">
+          <span class="rp-prefix">Rp</span>
+          <input type="text" inputmode="numeric" id="totalInput" placeholder="Final Total" oninput="onMoneyField(this); renderResult()">
+        </div>
       </div>
     </div>
     <p class="muted" style="margin-top:8px;">Every person's item subtotal is scaled by <b>Total ÷ Subtotal</b>, then rounded so the split always adds up exactly to the Total — no missing rupiah.</p>
@@ -236,10 +268,6 @@
       <div id="checkRow"></div>
     </div>
     <div class="export-toolbar">
-      <button class="btn-ghost" onclick="exportImage('png')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-        Save as PNG
-      </button>
       <button class="btn-ghost" onclick="exportImage('jpeg')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
         Save as JPEG
@@ -266,7 +294,6 @@
 
 <script>
 let people = [];
-let manualSubtotal = false;
 let expandedPeople = new Set();
 let expandedResults = new Set();
 
@@ -328,19 +355,36 @@ function removeItem(personId, itemId){
 // Text/number edits update the data model and only the numbers that depend on
 // it (subtotal chip, totals, result panel) — never re-render the input list
 // itself while the user is typing, or the cursor/focus would jump around.
-function updateItem(personId, itemId, field, value){
+function updateItem(personId, itemId, field, value, inputEl){
   const p = people.find(p => p.id === personId);
   if(!p) return;
   const it = p.items.find(i => i.id === itemId);
   if(!it) return;
-  it[field] = field === 'price' ? (parseFloat(value) || 0) : value;
+  it[field] = field === 'price' ? parseMoney(value) : value;
 
   if(field === 'price'){
+    if(inputEl) onMoneyField(inputEl);
     const chip = document.querySelector(`.person-card[data-person-id="${personId}"] .person-subtotal`);
     if(chip) chip.textContent = fmt(personSubtotal(p));
-    renderTotals();
   }
   renderResult();
+}
+
+function parseMoney(value){
+  const digits = String(value ?? '').replace(/[^\d]/g, '');
+  return digits ? parseInt(digits, 10) : 0;
+}
+
+function formatMoneyInput(n){
+  if(!n) return '';
+  return Math.round(n).toLocaleString('id-ID');
+}
+
+function onMoneyField(inputEl){
+  const n = parseMoney(inputEl.value);
+  const formatted = formatMoneyInput(n);
+  if(inputEl.value !== formatted) inputEl.value = formatted;
+  inputEl.closest('.money-wrap')?.classList.toggle('has-value', n > 0);
 }
 
 function fmt(n){
@@ -384,7 +428,6 @@ function allocateExact(shares, target){
 
 function render(){
   renderPeople();
-  renderTotals();
   renderResult();
 }
 
@@ -411,8 +454,11 @@ function renderPeople(){
             <div class="item-row">
               <input type="text" placeholder="Item" value="${escapeAttr(it.name)}"
                 oninput="updateItem('${p.id}','${it.id}','name',this.value)">
-              <input type="number" placeholder="Price" value="${it.price || ''}"
-                oninput="updateItem('${p.id}','${it.id}','price',this.value)">
+              <div class="money-wrap ${it.price ? 'has-value' : ''}">
+                <span class="rp-prefix">Rp</span>
+                <input type="text" inputmode="numeric" placeholder="Price" value="${it.price ? formatMoneyInput(it.price) : ''}"
+                  oninput="updateItem('${p.id}','${it.id}','price',this.value,this)">
+              </div>
               <button class="btn-danger" onclick="removeItem('${p.id}','${it.id}')">✕</button>
             </div>
           `).join('')}
@@ -424,15 +470,10 @@ function renderPeople(){
   }).join('');
 }
 
-function renderTotals(){
-  if(!manualSubtotal){
-    document.getElementById('subtotalInput').value = computeItemSubtotal() || '';
-  }
-}
-
 function renderResult(){
-  const subtotal = parseFloat(document.getElementById('subtotalInput').value) || 0;
-  const total = parseFloat(document.getElementById('totalInput').value) || 0;
+  const typedSubtotal = parseMoney(document.getElementById('subtotalInput').value);
+  const subtotal = typedSubtotal || computeItemSubtotal();
+  const total = parseMoney(document.getElementById('totalInput').value);
   const resultEl = document.getElementById('resultList');
   const checkEl = document.getElementById('checkRow');
 
@@ -548,14 +589,6 @@ function copyImage(){
   }).catch(() => showToast('Could not export image'));
 }
 
-// seed with the example from the receipt so the app opens with a working demo
-people = [
-  {id:'p1', name:'Ernest', items:[{id:'i1', name:'Order', price:27706}]},
-  {id:'p2', name:'Alvian Liaw', items:[{id:'i2', name:'Order', price:24242}]},
-  {id:'p3', name:'Joan', items:[{id:'i3', name:'Order', price:47619}]},
-  {id:'p4', name:'Orel', items:[{id:'i4', name:'Order', price:51948}]},
-];
-document.getElementById('totalInput').value = 175000;
 render();
 
 // Vanilla-JS equivalent of <Typewriter backspace="word">{text}</Typewriter>:
@@ -626,6 +659,75 @@ function runTypewriter(el, phrases, opts = {}){
 }
 
 runTypewriter(document.getElementById('typewriter'), ['Hitungin Bill dong', 'Split Jadi Mudah']);
+
+// Vanilla-canvas stand-in for the CanvasRevealEffect dot-matrix shader:
+// a grid of small squares in a two-tone blue gradient, each flickering at
+// its own pace, with a soft vignette so it reads as a sparkling backdrop
+// rather than a full framework/three.js dependency.
+function initSparkleCanvas(){
+  const canvas = document.getElementById('sparkleCanvas');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const hero = canvas.parentElement;
+  const colorA = [63, 233, 255];
+  const colorB = [10, 60, 220];
+  const cell = 7;
+  const dot = 3;
+  let dots = [];
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let width = 0, height = 0;
+
+  function lerp(a, b, t){ return a + (b - a) * t; }
+
+  function buildGrid(){
+    width = hero.clientWidth;
+    height = hero.clientHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    dots = [];
+    const cols = Math.ceil(width / cell) + 1;
+    const rows = Math.ceil(height / cell) + 1;
+    for(let r = 0; r < rows; r++){
+      for(let c = 0; c < cols; c++){
+        const t = cols > 1 ? c / (cols - 1) : 0;
+        dots.push({
+          x: c * cell,
+          y: r * cell,
+          color: [
+            Math.round(lerp(colorA[0], colorB[0], t)),
+            Math.round(lerp(colorA[1], colorB[1], t)),
+            Math.round(lerp(colorA[2], colorB[2], t)),
+          ],
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.6 + Math.random() * 1.4,
+          base: 0.08 + Math.random() * 0.1,
+        });
+      }
+    }
+  }
+
+  function frame(time){
+    ctx.clearRect(0, 0, width, height);
+    const t = time / 1000;
+    for(const d of dots){
+      const flicker = (Math.sin(t * d.speed + d.phase) + 1) / 2;
+      const opacity = d.base + flicker * 0.55;
+      ctx.fillStyle = `rgba(${d.color[0]},${d.color[1]},${d.color[2]},${opacity.toFixed(3)})`;
+      ctx.fillRect(d.x, d.y, dot, dot);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  buildGrid();
+  requestAnimationFrame(frame);
+  window.addEventListener('resize', () => buildGrid());
+}
+
+initSparkleCanvas();
 </script>
 </body>
 </html>
